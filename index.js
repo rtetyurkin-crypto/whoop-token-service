@@ -4,12 +4,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-
-// Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+// Supabase client - инициализируем внутри функций
+function getSupabase() {
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
+  );
+}
 
 // Health check
 app.get('/', (req, res) => {
@@ -134,4 +135,5 @@ app.post('/refresh-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
 
