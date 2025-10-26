@@ -1,40 +1,38 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-
-// Supabase client - инициализируем в runtime
-function getSupabase() {
-  return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY
-  );
-}
 
 // Health check
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'whoop-token-refresh' });
 });
 
-// Auto refresh - делает ВСЁ сам!
+// Auto refresh - использует прямые HTTP запросы
 app.get('/auto-refresh', async (req, res) => {
   try {
     console.log('Starting auto-refresh...');
 
-    // 1. Читаем токен из Supabase
-    const { data: tokenData, error: fetchError } = await getSupabase()
-      .from('whoop_tokens')
-      .select('*')
-      .eq('user_id', 20260404)
-      .single();
+    // 1. Читаем токен из Supabase через REST API
+    const fetchResponse = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/whoop_tokens?user_id=eq.20260404&select=*`,
+      {
+        headers: {
+          'apikey': process.env.SUPABASE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_KEY}`
+        }
+      }
+    );
 
-    if (fetchError) {
-      console.error('Error fetching token:', fetchError);
+    const tokenData = await fetchResponse.json();
+    
+    if (!fetchResponse.ok || !tokenData[0]) {
+      console.error('Error fetching token:', tokenData);
       return res.status(500).json({ error: 'Failed to fetch token from database' });
     }
 
+    const currentToken = tokenData[0];
     console.log('Token fetched from Supabase');
 
     // 2. Обновляем через Whoop API
@@ -43,7 +41,7 @@ app.get('/auto-refresh', async (req, res) => {
       client_id: process.env.WHOOP_CLIENT_ID,
       client_secret: process.env.WHOOP_CLIENT_SECRET,
       scope: 'offline',
-      refresh_token: tokenData.refresh_token
+      refresh_token: currentToken.refresh_token
     });
 
     const whoopResponse = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
@@ -63,21 +61,31 @@ app.get('/auto-refresh', async (req, res) => {
 
     console.log('New tokens received from Whoop');
 
-    // 3. Сохраняем обратно в Supabase
+    // 3. Сохраняем обратно в Supabase через REST API
     const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
 
-    const { error: updateError } = await getSupabase()
-      .from('whoop_tokens')
-      .update({
-        access_token: newTokens.access_token,
-        refresh_token: newTokens.refresh_token,
-        expires_at: expiresAt,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', 20260404);
+    const updateResponse = await fetch(
+      `${process.env.SUPABASE_URL}/rest/v1/whoop_tokens?user_id=eq.20260404`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': process.env.SUPABASE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          access_token: newTokens.access_token,
+          refresh_token: newTokens.refresh_token,
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString()
+        })
+      }
+    );
 
-    if (updateError) {
-      console.error('Error updating Supabase:', updateError);
+    if (!updateResponse.ok) {
+      const errorData = await updateResponse.text();
+      console.error('Error updating Supabase:', errorData);
       return res.status(500).json({ error: 'Failed to update database' });
     }
 
@@ -95,7 +103,7 @@ app.get('/auto-refresh', async (req, res) => {
   }
 });
 
-// Manual refresh endpoint (оставляем для тестов)
+// Manual refresh endpoint
 app.post('/refresh-token', async (req, res) => {
   try {
     const { refresh_token, client_id, client_secret } = req.body;
@@ -136,6 +144,3 @@ app.post('/refresh-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-
-
