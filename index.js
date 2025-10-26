@@ -42,7 +42,7 @@ app.get('/auto-refresh', async (req, res) => {
       grant_type: 'refresh_token',
       client_id: process.env.WHOOP_CLIENT_ID,
       client_secret: process.env.WHOOP_CLIENT_SECRET,
-      scope: 'offline',
+     scope: 'read:recovery read:sleep read:cycles read:workout read:profile offline',
       refresh_token: currentToken.refresh_token
     });
 
@@ -146,4 +146,5 @@ app.post('/refresh-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
 
