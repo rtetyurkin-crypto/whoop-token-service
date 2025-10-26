@@ -4,7 +4,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-// Supabase client - инициализируем внутри функций
+
+// Supabase client - инициализируем в runtime
 function getSupabase() {
   return createClient(
     process.env.SUPABASE_URL,
@@ -23,7 +24,7 @@ app.get('/auto-refresh', async (req, res) => {
     console.log('Starting auto-refresh...');
 
     // 1. Читаем токен из Supabase
-    const { data: tokenData, error: fetchError } = await supabase
+    const { data: tokenData, error: fetchError } = await getSupabase()
       .from('whoop_tokens')
       .select('*')
       .eq('user_id', 20260404)
@@ -65,7 +66,7 @@ app.get('/auto-refresh', async (req, res) => {
     // 3. Сохраняем обратно в Supabase
     const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await getSupabase()
       .from('whoop_tokens')
       .update({
         access_token: newTokens.access_token,
@@ -135,5 +136,6 @@ app.post('/refresh-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
 
 
